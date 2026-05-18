@@ -1,0 +1,25 @@
+mundurovehdb-plugin/
+├── mundurovehdb-plugin.php                 ← główny plik pluginu WordPress
+├── package.json                            ← konfiguracja npm / Vite
+├── vite.config.js                          ← konfiguracja dwóch bundle'ów React
+├── tsconfig.json                           ← TypeScript config
+├── README.md
+├── src/
+│   ├── internal/                           ← MunduroVehDB Internal (dla służb)
+│   │   ├── App.tsx
+│   │   ├── main.tsx
+│   │   └── components/                     ← (później)
+│   ├── public/                             ← MunduroVehDB Portal Obywatelski
+│   │   ├── App.tsx
+│   │   ├── main.tsx
+│   │   └── components/                     ← (później)
+│   └── shared/                             ← wspólne komponenty i logika
+│       ├── api.ts
+│       ├── types.ts
+│       ├── AuthGuard.tsx
+│       └── utils.ts
+├── dist/                                   ← (tworzy się automatycznie po build)
+│   ├── internal/
+│   └── public/
+└── assets/
+    └── css/

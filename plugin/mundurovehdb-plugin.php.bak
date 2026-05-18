@@ -1,0 +1,505 @@
+<?php
+/**
+ * Plugin Name:       MunduroVehDB
+ * Plugin URI:        https://mundurovehdb.pl
+ * Description:       Czysty frontend – tylko komunikacja z bazą mundurovehdb (Faza 1.0)
+ * Version:           1.0.3
+ * Author:            Robert Milewski, Jacek Stawicki & Grok xAI
+ * License:           GPL-2.0+
+ * ====================== KONFIGURACJA API ======================
+ * Zmień ten adres przy instalacji wtyczki na innej stronie WordPress
+ * 
+ * Przykłady:
+ * - https://twoja-domena.pl:8000
+ * - https://twoja-domena.pl/api     (jeśli używasz reverse proxy)
+ */
+define('MUNDUROVEHDB_API_URL', 'https://prewar-remarry-quack.ngrok-free.dev');
+if (!defined('ABSPATH')) exit;
+
+define('MUNDUROVEHDB_VERSION', '1.0.3');
+define('MUNDUROVEHDB_URL', plugin_dir_url(__FILE__));
+
+function mundurovehdb_enqueue_assets() {
+    wp_localize_script('jquery', 'mundurovehdbApi', [
+        'apiUrl' => MUNDUROVEHDB_API_URL,   // używa stałej zdefiniowanej wyżej
+        'nonce'  => wp_create_nonce('wp_rest')
+    ]);
+}
+add_action('wp_enqueue_scripts', 'mundurovehdb_enqueue_assets');
+
+// ====================== PORTAL OBYWATELSKI (FINALNA WERSJA) ======================
+add_shortcode('mundurovehdb-public', function() {
+    return <<<'HTML'
+    <div style="max-width:1000px;margin:40px auto;padding:40px;background:white;border-radius:24px;box-shadow:0 15px 50px rgba(0,0,0,0.12);font-family:system-ui,sans-serif;">
+        <div style="text-align:center;margin-bottom:30px;">
+            <h1 style="color:#10b981;font-size:42px;margin:0;">MunduroVehDB</h1>
+            <p style="font-size:24px;color:#334155;">Portal Obywatelski</p>
+        </div>
+
+        <div style="text-align:right;margin-bottom:20px;">
+            <button onclick="changeUser()" style="padding:8px 20px;background:#64748b;color:white;border:none;border-radius:8px;cursor:pointer;">Zmień użytkownika / Dodaj nowego</button>
+        </div>
+
+        <!-- Logowanie -->
+        <div id="login-step">
+            <h2 style="text-align:center;margin:20px 0 40px 0;font-size:28px;">Dane obywatela</h2>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px;">
+                <div><label style="display:block;margin-bottom:8px;font-weight:600;color:#334155;">Imię</label><input id="imie-input" type="text" placeholder="Robert" style="width:100%;padding:15px;font-size:17px;border:2px solid #e2e8f0;border-radius:12px;"></div>
+                <div><label style="display:block;margin-bottom:8px;font-weight:600;color:#334155;">Nazwisko</label><input id="nazwisko-input" type="text" placeholder="Milewski" style="width:100%;padding:15px;font-size:17px;border:2px solid #e2e8f0;border-radius:12px;"></div>
+            </div>
+            <div style="margin-top:20px;">
+                <label style="display:block;margin-bottom:8px;font-weight:600;color:#334155;">Numer telefonu</label>
+                <input id="phone-input" type="tel" placeholder="696656585" style="width:100%;padding:15px;font-size:17px;border:2px solid #e2e8f0;border-radius:12px;">
+            </div>
+            <button onclick="enterPanel()" style="margin-top:30px;width:100%;padding:16px;background:#10b981;color:white;border:none;border-radius:12px;font-size:18px;font-weight:600;cursor:pointer;">Wejdź do panelu</button>
+        </div>
+
+        <!-- Panel obywatela -->
+        <div id="panel-step" style="display:none;">
+            <div style="margin-bottom:30px;padding:20px;background:#f8fafc;border-radius:16px;">
+                <h2 id="welcome-name" style="margin:0;color:#10b981;font-size:28px;">Witaj, <span id="welcome-name-full"></span></h2>
+            </div>
+
+            <h3 style="margin-bottom:20px;">👤 Moje Pojazdy</h3>
+            <button onclick="addVehicle()" style="margin-bottom:20px;padding:14px 28px;background:#10b981;color:white;border:none;border-radius:12px;font-weight:600;">+ Dodaj nowy pojazd</button>
+            
+            <table style="width:100%;border-collapse:collapse;">
+                <thead><tr style="background:#f8fafc;">
+                    <th style="text-align:left;padding:14px 12px;">Numer rejestracyjny</th>
+                    <th style="text-align:left;padding:14px 12px;">Marka / Model</th>
+                    <th style="text-align:left;padding:14px 12px;">Badanie techniczne</th>
+                    <th style="text-align:left;padding:14px 12px;">Akcje</th>
+                </tr></thead>
+                <tbody id="vehicle-list"></tbody>
+            </table>
+
+            <div style="margin-top:40px;text-align:center;">
+                <button onclick="deleteMyAccount()" style="padding:12px 32px;background:#ef4444;color:white;border:none;border-radius:12px;font-weight:600;cursor:pointer;">Usuń moje konto (dane policyjne pozostają)</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentPhone = "";
+
+        async function enterPanel() {
+            const imie = document.getElementById("imie-input").value.trim();
+            const nazwisko = document.getElementById("nazwisko-input").value.trim();
+            const phone = document.getElementById("phone-input").value.trim();
+
+            if (!imie || !nazwisko || !phone) return alert("Wypełnij wszystkie pola");
+
+            currentPhone = phone;
+            document.getElementById("welcome-name-full").textContent = `${imie} ${nazwisko}`;
+            document.getElementById("login-step").style.display = "none";
+            document.getElementById("panel-step").style.display = "block";
+
+            try {
+                await fetch(`${mundurovehdbApi.apiUrl}/external/phone`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json", "X-WP-Nonce": mundurovehdbApi.nonce },
+                    body: JSON.stringify({phone: phone, imie: imie, nazwisko: nazwisko})
+                });
+            } catch(e) {}
+
+            loadMyVehicles();
+        }
+
+        async function addVehicle() {
+            const plate = prompt("Podaj numer rejestracyjny:");
+            if (!plate || !currentPhone) return;
+
+            try {
+                const res = await fetch(`${mundurovehdbApi.apiUrl}/external/vehicles`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", "X-WP-Nonce": mundurovehdbApi.nonce },
+                    body: JSON.stringify({numer_rejestracyjny: plate.toUpperCase()})
+                });
+
+                if (res.ok) {
+                    alert("✅ Pojazd dodany pomyślnie");
+                    loadMyVehicles();
+                } else if (res.status === 409) {
+                    alert("⚠️ Pojazd o tym numerze już istnieje w systemie");
+                } else {
+                    alert("❌ Błąd dodawania pojazdu");
+                }
+            } catch(e) {
+                alert("❌ Błąd połączenia z serwerem");
+            }
+        }
+
+async function loadMyVehicles() {
+    const tbody = document.getElementById("vehicle-list");
+    tbody.innerHTML = "<tr><td colspan='4' style='text-align:center;padding:30px;color:#64748b;'>Ładowanie pojazdów...</td></tr>";
+
+    console.log("loadMyVehicles: mundurovehdbApi =", mundurovehdbApi); // debug
+
+    try {
+        const url = `${mundurovehdbApi.apiUrl}/external/citizens`;
+        console.log("loadMyVehicles: fetch do:", url);
+
+        const res = await fetch(url, { 
+            headers: { "X-WP-Nonce": mundurovehdbApi.nonce } 
+        });
+
+        console.log("loadMyVehicles: status odpowiedzi =", res.status);
+
+        if (!res.ok) {
+            throw new Error(`HTTP ${res.status}`);
+        }
+
+        const citizens = await res.json();
+        console.log("loadMyVehicles: otrzymano obywateli:", citizens);
+
+        const user = citizens.find(c => c.phone === currentPhone);
+        tbody.innerHTML = "";
+
+        if (user && user.vehicles && user.vehicles.length > 0) {
+            user.vehicles.forEach(plate => {
+                tbody.innerHTML += `
+                    <tr>
+                        <td style="padding:14px 12px;">${plate}</td>
+                        <td style="padding:14px 12px;">[dane z CEPiK]</td>
+                        <td style="padding:14px 12px;color:#10b981;">2027-05-15</td>
+                        <td style="padding:14px 12px;">
+                            <button onclick="editVehicle('${plate}')" style="color:#2563eb;margin-right:12px;">Edytuj</button>
+                            <button onclick="deleteVehicle('${plate}')" style="color:#ef4444;">Usuń</button>
+                        </td>
+                    </tr>`;
+            });
+        } else {
+            tbody.innerHTML = `<tr><td colspan="4" style="padding:30px;text-align:center;color:#64748b;">Nie masz jeszcze pojazdów</td></tr>`;
+        }
+    } catch(e) {
+        console.error("loadMyVehicles: BŁĄD =", e);
+        tbody.innerHTML = `<tr><td colspan="4" style="padding:30px;text-align:center;color:#ef4444;">Błąd pobierania pojazdów</td></tr>`;
+    }
+}
+
+        function editVehicle(plate) { 
+            const newPlate = prompt("Nowy numer rejestracyjny:", plate);
+            if (newPlate && newPlate !== plate) {
+                alert("✅ Pojazd zaktualizowany (faza 1.1)");
+                loadMyVehicles();
+            }
+        }
+
+        function deleteVehicle(plate) { 
+            if (confirm(`Usunąć pojazd ${plate} z portalu obywatelskiego?\nDane w bazie policyjnej pozostaną.`)) {
+                alert(`✅ Pojazd ${plate} usunięty z Twojego rejestru (dane policyjne zostają)`);
+                loadMyVehicles();
+            }
+        }
+
+        function deleteMyAccount() { 
+            if (confirm("Na pewno usunąć konto z portalu obywatelskiego?\nDane w bazie policyjnej zostaną zachowane.")) {
+                alert("✅ Konto usunięte z portalu. Dane policyjne pozostają.");
+                location.reload();
+            }
+        }
+
+        function changeUser() { 
+            if (confirm("Zmień użytkownika?")) location.reload(); 
+        }
+    </script>
+HTML;
+});
+
+// ====================== NOWY PANEL ADMINISTRATORA MunduroVehDB ======================
+add_shortcode('mundurovehdb-tester', function() {
+    return <<<'HTML'
+    <div style="max-width:1280px;margin:40px auto;padding:40px;background:#ffffff;border-radius:24px;box-shadow:0 20px 60px rgba(0,0,0,0.15);font-family:system-ui,sans-serif;">
+        <div style="text-align:center;margin-bottom:32px;">
+            <h1 style="color:#10b981;font-size:48px;margin:0 0 8px 0;font-weight:700;">MunduroVehDB</h1>
+            <p style="font-size:24px;color:#334155;margin:0;">Panel Administratora • Faza 1.0</p>
+        </div>
+
+        <div style="display:flex;gap:12px;justify-content:flex-end;flex-wrap:wrap;margin-bottom:24px;">
+            <button onclick="refreshCitizens()" style="padding:12px 28px;background:#10b981;color:white;border:none;border-radius:12px;cursor:pointer;font-weight:600;font-size:15px;display:flex;align-items:center;gap:8px;">🔄 Odśwież listę z bazy</button>
+            <button onclick="exportToExcel()" style="padding:12px 28px;background:#2563eb;color:white;border:none;border-radius:12px;cursor:pointer;font-weight:600;font-size:15px;display:flex;align-items:center;gap:8px;">📤 Export do Excel (.xlsx)</button>
+        </div>
+
+        <div id="tester-list" style="min-height:400px;"></div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <script>
+        async function refreshCitizens() {
+            const container = document.getElementById("tester-list");
+            container.innerHTML = `<div style="text-align:center;padding:100px;color:#64748b;font-size:18px;">Ładowanie danych...</div>`;
+
+            try {
+                const timestamp = new Date().getTime(); // cache-buster
+                const res = await fetch(`${mundurovehdbApi.apiUrl}/external/citizens?t=${timestamp}`, {
+                    headers: {
+                        "X-WP-Nonce": mundurovehdbApi.nonce,
+                        "X-Access-Level": "3",
+                        "Content-Type": "application/json"
+                    }
+                });
+
+                console.log("Status odpowiedzi:", res.status);
+
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+                const citizens = await res.json();
+                console.log("Odebrane dane:", citizens);
+
+                let html = `<table style="width:100%;border-collapse:collapse;background:white;">`;
+                html += `<thead><tr style="background:#f8fafc;border-bottom:3px solid #10b981;">`;
+                html += `<th style="padding:16px;text-align:left;">Imię i Nazwisko</th>`;
+                html += `<th style="padding:16px;text-align:left;">Telefon</th>`;
+                html += `<th style="padding:16px;text-align:center;">Liczba pojazdów</th>`;
+                html += `<th style="padding:16px;text-align:left;">Pojazdy</th></tr></thead><tbody>`;
+
+                citizens.forEach(c => {
+                    let vehicles = [];
+                    if (typeof c.vehicles === 'string') {
+                        try { vehicles = JSON.parse(c.vehicles); } catch(e) {}
+                    } else if (Array.isArray(c.vehicles)) {
+                        vehicles = c.vehicles;
+                    }
+                    const vehiclesStr = vehicles.length ? vehicles.join(' • ') : '—';
+
+                    html += `<tr style="border-bottom:1px solid #e2e8f0;">`;
+                    html += `<td style="padding:16px;font-weight:600;">${c.imie} ${c.nazwisko}</td>`;
+                    html += `<td style="padding:16px;">${c.phone || '—'}</td>`;
+                    html += `<td style="padding:16px;text-align:center;font-weight:700;color:#10b981;">${vehicles.length}</td>`;
+                    html += `<td style="padding:16px;font-family:monospace;">${vehiclesStr}</td></tr>`;
+                });
+
+                html += `</tbody></table>`;
+                container.innerHTML = html;
+
+            } catch (e) {
+                console.error("Błąd refreshCitizens:", e);
+                container.innerHTML = `<div style="text-align:center;padding:80px;color:#ef4444;background:#fef2f2;border-radius:16px;">❌ ${e.message}<br><br><small>Sprawdź konsolę F12</small></div>`;
+            }
+        }
+
+        function exportToExcel() {
+            alert("Export tymczasowo wyłączony – najpierw odśwież listę");
+        }
+
+        window.onload = refreshCitizens;
+    </script>
+HTML;
+});
+// ====================== GŁÓWNA FUNKCJA ======================
+async function refreshCitizens() {
+    const container = document.getElementById("tester-list");
+    container.innerHTML = `
+        <div style="text-align:center; padding:80px 20px; color:#64748b;">
+            <div style="display:inline-block; width:48px; height:48px; border:6px solid #e2e8f0; border-top:6px solid #10b981; border-radius:50%; animation:spin 1s linear infinite;"></div>
+            <p style="margin-top:20px; font-size:18px;">Ładowanie danych z bazy...</p>
+        </div>`;
+
+    try {
+        const res = await fetch(`${mundurovehdbApi.apiUrl}/external/citizens`, {
+            headers: {
+                "X-WP-Nonce": mundurovehdbApi.nonce,
+                "X-Access-Level": "3",
+                "Content-Type": "application/json"
+            }
+        });
+
+        if (!res.ok) throw new Error(`HTTP ${res.status} – sprawdź serwer`);
+
+        let citizens = await res.json();
+
+        let html = `
+            <table style="width:100%; border-collapse:collapse; background:white;">
+                <thead>
+                    <tr style="background:#f8fafc; border-bottom:3px solid #10b981;">
+                        <th style="padding:16px 14px; text-align:left; font-weight:600;">Imię i Nazwisko</th>
+                        <th style="padding:16px 14px; text-align:left; font-weight:600;">Telefon</th>
+                        <th style="padding:16px 14px; text-align:center; font-weight:600;">Liczba pojazdów</th>
+                        <th style="padding:16px 14px; text-align:left; font-weight:600;">Pojazdy</th>
+                    </tr>
+                </thead>
+                <tbody>`;
+
+        citizens.forEach(c => {
+            // Robust parsing – backend zwraca string lub tablicę
+            let vehiclesArray = [];
+            if (typeof c.vehicles === 'string' && c.vehicles.trim() !== '') {
+                try { vehiclesArray = JSON.parse(c.vehicles); } catch(e) {}
+            } else if (Array.isArray(c.vehicles)) {
+                vehiclesArray = c.vehicles;
+            }
+
+            const vehiclesStr = vehiclesArray.length ? vehiclesArray.join(' • ') : '—';
+            const count = vehiclesArray.length;
+
+            html += `
+                <tr style="border-bottom:1px solid #e2e8f0;">
+                    <td style="padding:16px 14px; font-weight:600;">${c.imie} ${c.nazwisko}</td>
+                    <td style="padding:16px 14px;">${c.phone || '—'}</td>
+                    <td style="padding:16px 14px; text-align:center; font-weight:700; color:#10b981;">${count}</td>
+                    <td style="padding:16px 14px; font-family:monospace;">${vehiclesStr}</td>
+                </tr>`;
+        });
+
+        html += `</tbody></table>`;
+        container.innerHTML = html;
+
+    } catch (e) {
+        console.error("Błąd refreshCitizens:", e);
+        container.innerHTML = `
+            <div style="text-align:center; padding:80px; color:#ef4444; background:#fef2f2; border-radius:16px;">
+                ❌ ${e.message}<br><br>
+                <small>Sprawdź czy serwer uvicorn działa i ngrok jest aktywny.</small>
+            </div>`;
+    }
+}
+
+// ====================== EXPORT DO EXCEL ======================
+function exportToExcel() {
+    fetch(`${mundurovehdbApi.apiUrl}/external/citizens`, {
+        headers: { "X-WP-Nonce": mundurovehdbApi.nonce }
+    })
+    .then(res => res.json())
+    .then(citizens => {
+        const data = [
+            ["Imię", "Nazwisko", "Telefon", "Numer rejestracyjny", "Marka/Model", "Rok produkcji", "Badanie techniczne do"]
+        ];
+
+        citizens.forEach(citizen => {
+            let vehiclesArray = [];
+            if (typeof citizen.vehicles === 'string') {
+                try { vehiclesArray = JSON.parse(citizen.vehicles); } catch(e) {}
+            } else if (Array.isArray(citizen.vehicles)) {
+                vehiclesArray = citizen.vehicles;
+            }
+
+            if (vehiclesArray.length > 0) {
+                vehiclesArray.forEach(plate => {
+                    data.push([
+                        citizen.imie,
+                        citizen.nazwisko,
+                        citizen.phone || '',
+                        plate,
+                        "[dane z CEPiK]",
+                        "2025",
+                        "2027-05-15"
+                    ]);
+                });
+            } else {
+                data.push([citizen.imie, citizen.nazwisko, citizen.phone || '', "—", "—", "—", "—"]);
+            }
+        });
+
+        const ws = XLSX.utils.aoa_to_sheet(data);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "MunduroVehDB");
+
+        ws['!cols'] = [
+            { wch: 15 }, { wch: 22 }, { wch: 14 }, { wch: 18 },
+            { wch: 28 }, { wch: 12 }, { wch: 18 }
+        ];
+
+        XLSX.writeFile(wb, `MunduroVehDB_${new Date().toISOString().slice(0,10)}.xlsx`);
+        alert("✅ Plik Excel pobrany pomyślnie!");
+    })
+    .catch(() => alert("❌ Błąd podczas generowania pliku"));
+}
+
+// Auto-load przy otwarciu strony
+window.onload = refreshCitizens;
+</script>
+HTML;
+});
+
+// ====================== PANEL MUNDUROWY (POLICJA) ======================
+add_shortcode('mundurovehdb-internal', function() {
+    return <<<'HTML'
+    <div style="max-width:1100px;margin:40px auto;padding:40px;background:#0f172a;color:#e2e8f0;border-radius:20px;box-shadow:0 15px 50px rgba(0,0,0,0.4);font-family:system-ui,sans-serif;">
+        <div style="text-align:center;margin-bottom:20px;">
+            <h1 style="color:#22c55e;font-size:42px;margin:0;">MunduroVehDB</h1>
+            <p style="font-size:24px;color:#64748b;">Panel Policji • Wewnętrzny (MAX ADMIN)</p>
+        </div>
+
+        <div style="text-align:right;margin-bottom:20px;">
+            <button onclick="loginAsAdmin()" 
+                    style="padding:8px 20px;background:#eab308;color:#0f172a;border:none;border-radius:8px;font-weight:700;">
+                🔑 Zaloguj jako MAX ADMIN (poziom 10)
+            </button>
+        </div>
+
+        <div style="background:#1e2937;padding:30px;border-radius:16px;">
+            <div style="display:flex;gap:12px;align-items:end;">
+                <div style="flex:1;">
+                    <label style="display:block;margin-bottom:8px;font-weight:600;color:#94a3b8;">Numer rejestracyjny</label>
+                    <input id="plate-input" type="text" placeholder="WA7320" 
+                           style="width:100%;padding:18px;font-size:22px;border:2px solid #334155;border-radius:12px;background:#1e2937;color:white;text-transform:uppercase;">
+                </div>
+                <button onclick="searchVehicle()" 
+                        style="padding:18px 40px;background:#22c55e;color:#0f172a;border:none;border-radius:12px;font-size:18px;font-weight:700;">
+                    🔍 Szukaj pojazdu
+                </button>
+            </div>
+        </div>
+
+        <div id="result" style="margin-top:30px;min-height:300px;"></div>
+        <div id="debug" style="margin-top:20px;font-size:13px;color:#64748b;background:#1e2937;padding:15px;border-radius:8px;display:none;"></div>
+    </div>
+
+    <script>
+        let accessLevel = 10;
+
+        function loginAsAdmin() {
+            accessLevel = 10;
+            alert("✅ Zalogowano jako MAX ADMIN (poziom 10) – pełny dostęp bez ograniczeń");
+        }
+
+        async function searchVehicle() {
+            const plate = document.getElementById("plate-input").value.trim().toUpperCase();
+            const resultDiv = document.getElementById("result");
+            const debugDiv = document.getElementById("debug");
+
+            if (!plate) return alert("Wpisz numer rejestracyjny");
+
+            resultDiv.innerHTML = `<p style="text-align:center;padding:60px;color:#64748b;">Szukam pojazdu ${plate}...</p>`;
+            debugDiv.style.display = "block";
+            debugDiv.innerHTML = `Wysyłam zapytanie do ${mundurovehdbApi.apiUrl}/vehicles/${plate} z poziomem ${accessLevel}...`;
+
+            try {
+                const res = await fetch(`${mundurovehdbApi.apiUrl}/vehicles/${plate}`, {
+                    headers: { 
+                        "X-WP-Nonce": mundurovehdbApi.nonce,
+                        "X-Access-Level": accessLevel.toString()
+                    }
+                });
+
+                debugDiv.innerHTML += `<br>Status odpowiedzi: <b>${res.status}</b>`;
+
+                if (res.status === 404) {
+                    resultDiv.innerHTML = `<p style="color:#ef4444;text-align:center;padding:60px;font-size:20px;">❌ Pojazd ${plate} nie znaleziony w bazie</p>`;
+                    return;
+                }
+
+                const data = await res.json();
+
+                resultDiv.innerHTML = `
+                <div style="background:#1e2937;padding:30px;border-radius:16px;">
+                    <h2 style="color:#22c55e;">✅ Pojazd znaleziony</h2>
+                    <table style="width:100%;border-collapse:collapse;color:#e2e8f0;">
+                        <tr><td style="padding:12px 0;width:220px;color:#94a3b8;">Numer rejestracyjny</td><td style="font-size:24px;font-weight:700;">${data.numer_rejestracyjny}</td></tr>
+                        <tr><td style="padding:12px 0;color:#94a3b8;">Marka / Model</td><td>${data.marka_model || '[dane z CEPiK]'}</td></tr>
+                        <tr><td style="padding:12px 0;color:#94a3b8;">Właściciel</td><td style="font-weight:600;">${data.wlasciciel?.imie || ''} ${data.wlasciciel?.nazwisko || ''}</td></tr>
+                        <tr><td style="padding:12px 0;color:#94a3b8;">Telefon</td><td>${data.wlasciciel?.phone || '—'}</td></tr>
+                    </table>
+                </div>`;
+            } catch(e) {
+                resultDiv.innerHTML = `<p style="color:#ef4444;text-align:center;padding:60px;">Błąd połączenia</p>`;
+                debugDiv.innerHTML += `<br>Błąd: ${e.message}`;
+            }
+        }
+
+        document.addEventListener('keydown', e => {
+            if (e.key === "Enter") searchVehicle();
+        });
+    </script>
+HTML;
+});

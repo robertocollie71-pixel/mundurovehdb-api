@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="pl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MunduroVehDB – Portal Obywatelski</title>
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; margin: 0; padding: 20px; background: #f0f2f5; }
+        .container { max-width: 820px; margin: 40px auto; background: white; border-radius: 16px; box-shadow: 0 10px 40px rgba(0,0,0,0.15); overflow: hidden; }
+        .header { background: linear-gradient(135deg, #1e40af, #2a5bc4); color: white; padding: 30px; text-align: center; }
+        .header h1 { margin: 0; font-size: 28px; }
+        .nav { display: flex; background: #f8f9fa; border-bottom: 3px solid #1e40af; }
+        .nav button { flex: 1; padding: 16px; border: none; background: #f8f9fa; font-weight: bold; cursor: pointer; font-size: 15px; transition: all 0.3s; }
+        .nav button:hover { background: #e3e7f0; }
+        .nav button.active { background: #1e40af; color: white; }
+        .tab { display: none; padding: 40px; }
+        .tab.active { display: block; }
+        label { display: block; margin: 18px 0 6px; font-weight: 600; color: #333; }
+        input { padding: 14px; width: 100%; border-radius: 8px; border: 1px solid #ccc; font-size: 16px; }
+        button { padding: 14px; margin-top: 20px; width: 100%; border-radius: 8px; background: #1e40af; color: white; border: none; cursor: pointer; font-weight: bold; }
+        button:hover { background: #0f2a7a; }
+        .item { display: flex; gap: 10px; align-items: center; background: #f8f9fa; padding: 12px; margin-bottom: 8px; border-radius: 8px; }
+        .remove-btn { background: #e74c3c; color: white; border: none; width: 36px; height: 36px; border-radius: 50%; cursor: pointer; font-size: 18px; }
+        .result { background: #e8f5e9; padding: 20px; border-radius: 12px; margin-top: 25px; }
+        .vehicle-card { border: 1px solid #ddd; padding: 15px; margin: 10px 0; border-radius: 8px; background: #f9f9f9; }
+        .map { height: 320px; background: #ddd; border-radius: 12px; display: flex; align-items: center; justify-content: center; color: #555; font-size: 18px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚗 MunduroVehDB – Portal Obywatelski</h1>
+            <p>Zarządzaj swoimi pojazdami i danymi kontaktowymi</p>
+        </div>
+
+        <div class="nav">
+            <button onclick="showTab(1)" class="active">Moje dane</button>
+            <button onclick="showTab(2)">Moje pojazdy</button>
+            <button onclick="showTab(3)">Wyszukaj pojazd</button>
+            <button onclick="showTab(4)">Lokalizacja GPS</button>
+        </div>
+
+        <!-- Tab 1: Moje dane -->
+        <div id="tab1" class="tab active">
+            <label>Numer telefonu (wymagany)</label>
+            <input type="tel" id="phone" placeholder="123456789" maxlength="9">
+
+            <label style="margin-top:25px;">Numery rejestracyjne pojazdów</label>
+            <div id="plate-list"></div>
+            <button onclick="addPlateField()" style="background:#555; width:auto; padding:10px 20px;">+ Dodaj numer rejestracyjny</button>
+
+            <label style="margin-top:25px;">Konta w mediach społecznościowych (opcjonalnie)</label>
+            <div id="social-list"></div>
+            <button onclick="addSocialField()" style="background:#555; width:auto; padding:10px 20px;">+ Dodaj konto social media</button>
+
+            <button onclick="saveMyData()" style="margin-top:30px;">💾 Zapisz moje dane</button>
+        </div>
+
+        <!-- Tab 2: Moje pojazdy -->
+        <div id="tab2" class="tab">
+            <div id="my-vehicles-list" class="result">Po zapisaniu danych pojawi się lista Twoich pojazdów.</div>
+        </div>
+
+        <!-- Tab 3: Wyszukaj pojazd -->
+        <div id="tab3" class="tab">
+            <label>Wyszukaj pojazd po numerze rejestracyjnym</label>
+            <input type="text" id="search-plate" placeholder="WA12345" style="text-transform:uppercase;">
+            <button onclick="searchVehicle()">🔍 Wyszukaj pojazd</button>
+            <div id="search-result" class="result" style="display:none;"></div>
+        </div>
+
+        <!-- Tab 4: Lokalizacja GPS -->
+        <div id="tab4" class="tab">
+            <h3>Lokalizacja GPS pojazdu i telefonu</h3>
+            <div class="map">🗺️ Tutaj będzie mapa Google Maps (w produkcji)</div>
+        </div>
+    </div>
+
+    <script>
+        function addPlateField() {
+            const list = document.getElementById("plate-list");
+            const div = document.createElement("div");
+            div.className = "item";
+            div.innerHTML = `<input type="text" placeholder="WA12345" style="flex:1;"><button class="remove-btn" onclick="this.parentElement.remove()">×</button>`;
+            list.appendChild(div);
+        }
+
+        function addSocialField() {
+            const list = document.getElementById("social-list");
+            const div = document.createElement("div");
+            div.className = "item";
+            div.innerHTML = `<select style="width:160px;"><option>Facebook</option><option>Instagram</option><option>X (Twitter)</option><option>TikTok</option></select><input type="text" placeholder="nazwa użytkownika lub link" style="flex:1;"><button class="remove-btn" onclick="this.parentElement.remove()">×</button>`;
+            list.appendChild(div);
+        }
+
+        async function saveMyData() {
+            const phone = document.getElementById("phone").value.trim();
+            if (phone.length < 9) return alert("Podaj poprawny numer telefonu");
+
+            const plates = Array.from(document.querySelectorAll("#plate-list input")).map(i => i.value.trim()).filter(Boolean);
+            if (plates.length === 0) return alert("Dodaj przynajmniej jeden numer rejestracyjny");
+
+            const res = await fetch("/external/save-my-vehicles", {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({ phone_number: phone, registration_numbers: plates })
+            });
+
+            const data = await res.json();
+            if (data.success) {
+                alert("✅ Dane zapisane pomyślnie!");
+                showTab(2);
+            } else {
+                alert(data.message || "Błąd zapisu");
+            }
+        }
+
+        async function searchVehicle() {
+            const plate = document.getElementById("search-plate").value.trim().toUpperCase();
+            if (!plate) return alert("Wpisz numer rejestracyjny");
+
+            const res = await fetch(`/vehicles/${plate}`);
+            if (res.ok) {
+                const v = await res.json();
+                document.getElementById("search-result").innerHTML = `<strong>${v.numer_rejestracyjny}</strong> — ${v.marka_model} ${v.rok_produkcji}<br>Właściciel: ${v.wlasciciel.imie} ${v.wlasciciel.nazwisko}`;
+            } else {
+                document.getElementById("search-result").innerHTML = "Pojazd nie znaleziony.";
+            }
+            document.getElementById("search-result").style.display = "block";
+        }
+
+        function showTab(n) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.getElementById('tab' + n).classList.add('active');
+
+            // Aktualizacja active w nawigacji
+            document.querySelectorAll('.nav button').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.nav button')[n-1].classList.add('active');
+        }
+
+        window.onload = () => addPlateField();
+    </script>
+</body>
+</html>
