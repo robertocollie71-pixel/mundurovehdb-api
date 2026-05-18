@@ -16,39 +16,67 @@ async def update_or_create_phone(request: Request, db: Session = Depends(get_db)
         imie = data.get("imie")
         nazwisko = data.get("nazwisko")
 
-        print(f"[DEBUG PHONE] Otrzymano: phone={phone}, imie={imie}, nazwisko={nazwisko}")
+        print(f"[DEBUG PHONE] Otrzymano: {phone} | {imie} {nazwisko}")
 
-        # Prosty insert lub update
         query = text("""
-            INSERT INTO owners (nr_telefonu_enc, imie, nazwisko, pesel_hash)
-            VALUES (:phone, :imie, :nazwisko, 'placeholder')
+            INSERT INTO owners (nr_telefonu_enc, imie, nazwisko)
+            VALUES (:phone, :imie, :nazwisko)
             ON CONFLICT (nr_telefonu_enc) 
-            DO UPDATE SET 
-                imie = EXCLUDED.imie,
-                nazwisko = EXCLUDED.nazwisko
-            RETURNING id
+            DO UPDATE SET imie = EXCLUDED.imie, nazwisko = EXCLUDED.nazwisko
         """)
         
-        result = db.execute(query, {"phone": phone, "imie": imie, "nazwisko": nazwisko})
-        owner_id = result.scalar()
+        db.execute(query, {"phone": phone, "imie": imie, "nazwisko": nazwisko})
         db.commit()
 
-        print(f"[DEBUG PHONE] ✅ Zapisano owner ID={owner_id}")
-        return {"status": "success", "message": "Dane zapisane", "owner_id": owner_id}
-
+        return {"status": "success", "message": "Dane obywatela zapisane"}
     except Exception as e:
         db.rollback()
         print("[ERROR PHONE]", str(e))
-        import traceback
-        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+# ====================== SOCIAL MEDIA (nowy endpoint) ======================
+@router.post("/social")
+async def save_social_media(request: Request, db: Session = Depends(get_db)):
+    try:
+        data = await request.json()
+        phone = data.get("phone")
+        facebook = data.get("facebook")
+        instagram = data.get("instagram")
+        x = data.get("x")
+        linkedin = data.get("linkedin")
+
+        print(f"[DEBUG SOCIAL] Zapisuję dla telefonu {phone} → FB:{facebook}, IG:{instagram}, X:{x}, LI:{linkedin}")
+
+        query = text("""
+            UPDATE owners 
+            SET facebook = :facebook,
+                instagram = :instagram,
+                x_handle = :x,
+                linkedin = :linkedin
+            WHERE nr_telefonu_enc = :phone
+        """)
+        
+        result = db.execute(query, {
+            "phone": phone,
+            "facebook": facebook or None,
+            "instagram": instagram or None,
+            "x": x or None,
+            "linkedin": linkedin or None
+        })
+        db.commit()
+
+        if result.rowcount == 0:
+            return {"status": "warning", "message": "Nie znaleziono obywatela z tym telefonem"}
+        
+        return {"status": "success", "message": "Social media zapisane"}
+    except Exception as e:
+        db.rollback()
+        print("[ERROR SOCIAL]", str(e))
         raise HTTPException(status_code=500, detail=str(e))
 
 # ====================== CITIZENS (istniejący) ======================
 @router.get("/citizens")
 async def get_all_citizens_endpoint(request: Request, db: Session = Depends(get_db)):
-    print("=== [DEBUG CITIZENS] Otrzymane nagłówki ===")
-    print(dict(request.headers))
-    print("=== END DEBUG ===")
     try:
         query = text("""
             SELECT
@@ -66,10 +94,7 @@ async def get_all_citizens_endpoint(request: Request, db: Session = Depends(get_
         """)
         result = db.execute(query)
         citizens = [dict(row._mapping) for row in result]
-        print(f"[SUCCESS] Zwrócono {len(citizens)} obywateli")
         return citizens
     except Exception as e:
-        print("[ERROR] /external/citizens:", str(e))
-        import traceback
-        traceback.print_exc()
+        print("[ERROR CITIZENS]", str(e))
         raise HTTPException(status_code=500, detail=str(e))
