@@ -15,9 +15,8 @@ async def update_or_create_phone(request: Request, db: Session = Depends(get_db)
         imie = data.get("imie")
         nazwisko = data.get("nazwisko")
 
-        print(f"[DEBUG PHONE] Otrzymano: phone={phone}, imie={imie}, nazwisko={nazwisko}")
+        print(f"[DEBUG PHONE] Zapisuję: {phone} | {imie} {nazwisko}")
 
-        # SQLite-safe upsert
         query = text("""
             INSERT INTO owners (nr_telefonu_enc, imie, nazwisko)
             VALUES (:phone, :imie, :nazwisko)
@@ -27,7 +26,7 @@ async def update_or_create_phone(request: Request, db: Session = Depends(get_db)
         db.execute(query, {"phone": phone, "imie": imie, "nazwisko": nazwisko})
         db.commit()
 
-        return {"status": "success", "message": "Dane zapisane"}
+        return {"status": "success", "message": "Dane obywatela zapisane"}
     except Exception as e:
         db.rollback()
         print("[ERROR PHONE]", str(e))
@@ -44,15 +43,7 @@ async def save_social_media(request: Request, db: Session = Depends(get_db)):
         x = data.get("x")
         linkedin = data.get("linkedin")
 
-        print(f"[DEBUG SOCIAL] Zapisuję social dla {phone}")
-
-        # Dodaj kolumny jeśli nie istnieją (bezpieczne)
-        for col in ["facebook", "instagram", "x_handle", "linkedin"]:
-            try:
-                db.execute(text(f"ALTER TABLE owners ADD COLUMN {col} TEXT"))
-                db.commit()
-            except:
-                pass  # kolumna już istnieje
+        print(f"[DEBUG SOCIAL] Zapisuję dla {phone} → FB:{facebook}, IG:{instagram}, X:{x}, LI:{linkedin}")
 
         query = text("""
             UPDATE owners 
@@ -62,16 +53,17 @@ async def save_social_media(request: Request, db: Session = Depends(get_db)):
                 linkedin = :linkedin
             WHERE nr_telefonu_enc = :phone
         """)
+        
         db.execute(query, {
             "phone": phone,
-            "facebook": facebook,
-            "instagram": instagram,
-            "x": x,
-            "linkedin": linkedin
+            "facebook": facebook or None,
+            "instagram": instagram or None,
+            "x": x or None,
+            "linkedin": linkedin or None
         })
         db.commit()
 
-        return {"status": "success", "message": "Social media zapisane"}
+        return {"status": "success", "message": "Social media zapisane pomyślnie"}
     except Exception as e:
         db.rollback()
         print("[ERROR SOCIAL]", str(e))
