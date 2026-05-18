@@ -1,0 +1,32 @@
+# Virtual Environment
+venv/
+.venv/
+env/
+ENV/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Database
+*.db
+*.sqlite3
+
+# Logs
+*.log
+uvicorn.log
+ngrok.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Build / temp
+__pycache__/
+.mypy_cache/
+.pytest_cache/
