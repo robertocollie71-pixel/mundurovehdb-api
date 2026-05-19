@@ -19,7 +19,8 @@ async def get_vehicle(numer_rejestracyjny: str, request: Request, db: Session = 
                 COALESCE(v.marka_model, '[dane z CEPiK]') as marka_model,
                 o.imie,
                 o.nazwisko,
-                COALESCE(o.nr_telefonu_enc, '') as phone
+                COALESCE(o.nr_telefonu_enc, '') as phone,
+                o.id as owner_id
             FROM vehicles v
             LEFT JOIN owners o ON v.owner_id = o.id
             WHERE v.numer_rejestracyjny = :plate
@@ -32,9 +33,11 @@ async def get_vehicle(numer_rejestracyjny: str, request: Request, db: Session = 
             raise HTTPException(status_code=404, detail="Pojazd nie znaleziony")
 
         data = dict(result._mapping)
-        data["wlasciciel"] = f"{data.get('imie', '')} {data.get('nazwisko', '')}".strip() or "Nieznany właściciel"
 
-        print(f"[DEBUG VEHICLE] Znaleziono {plate} → {data['wlasciciel']} | tel: {data.get('phone')}")
+        # Zawsze zwracamy czytelne pola dla panelu policji
+        data["wlasciciel"] = f"{data.get('imie') or ''} {data.get('nazwisko') or ''}".strip() or "Nieznany właściciel"
+
+        print(f"[DEBUG VEHICLE] {plate} → owner_id={data.get('owner_id')} | wlasciciel={data['wlasciciel']} | phone={data.get('phone')}")
 
         return data
 
