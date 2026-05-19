@@ -157,3 +157,27 @@ async def update_vehicle_plate(request: Request, db: Session = Depends(get_db)):
         db.rollback()
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+    
+    # ====================== USUWANIE POJAZDU Z PERSPEKTYWY OBYWATELA ======================
+@router.delete("/vehicles/{plate}")
+async def delete_vehicle_for_owner(plate: str, request: Request, db: Session = Depends(get_db)):
+    try:
+        plate = plate.upper().strip()
+
+        result = db.execute(text("""
+            DELETE FROM vehicles 
+            WHERE numer_rejestracyjny = :plate
+        """), {"plate": plate})
+
+        db.commit()
+
+        if result.rowcount == 0:
+            return {"status": "warning", "message": "Pojazd nie znaleziony"}
+
+        print(f"[DEBUG DELETE] Pojazd {plate} usunięty z Panelu Obywatelskiego")
+        return {"status": "success", "message": f"Pojazd {plate} usunięty z Twojego rejestru"}
+
+    except Exception as e:
+        db.rollback()
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
