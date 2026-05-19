@@ -97,7 +97,7 @@ async def add_vehicle(request: Request, db: Session = Depends(get_db)):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-# ====================== CITIZENS (czysta wersja bez DDL) ======================
+# ====================== CITIZENS (poprawione dla PostgreSQL) ======================
 @router.get("/citizens")
 async def get_all_citizens_endpoint(request: Request, db: Session = Depends(get_db)):
     try:
@@ -112,7 +112,7 @@ async def get_all_citizens_endpoint(request: Request, db: Session = Depends(get_
                 COALESCE(o.x_handle, '') as x_handle,
                 COALESCE(o.linkedin, '') as linkedin,
                 COALESCE(
-                    (SELECT json_group_array(v.numer_rejestracyjny)
+                    (SELECT json_agg(v.numer_rejestracyjny)
                      FROM vehicles v WHERE v.owner_id = o.id),
                     '[]'
                 ) as vehicles
