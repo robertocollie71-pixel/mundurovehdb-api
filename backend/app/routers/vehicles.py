@@ -24,7 +24,12 @@ async def get_vehicle(numer_rejestracyjny: str, request: Request, db: Session = 
                 COALESCE(o.instagram, '') as instagram,
                 COALESCE(o.x_handle, '') as x_handle,
                 COALESCE(o.linkedin, '') as linkedin,
-                o.id as owner_id
+                COALESCE(
+                    (SELECT json_agg(v2.numer_rejestracyjny) 
+                     FROM vehicles v2 
+                     WHERE v2.owner_id = o.id),
+                    '[]'
+                ) as vehicles
             FROM vehicles v
             LEFT JOIN owners o ON v.owner_id = o.id
             WHERE v.numer_rejestracyjny = :plate
@@ -37,10 +42,9 @@ async def get_vehicle(numer_rejestracyjny: str, request: Request, db: Session = 
             raise HTTPException(status_code=404, detail="Pojazd nie znaleziony")
 
         data = dict(result._mapping)
-
         data["wlasciciel"] = f"{data.get('imie') or ''} {data.get('nazwisko') or ''}".strip() or "Nieznany właściciel"
 
-        print(f"[DEBUG VEHICLE] {plate} | owner_id={data.get('owner_id')} | wlasciciel={data['wlasciciel']} | tel={data.get('phone')} | x={data.get('x_handle')}")
+        print(f"[DEBUG VEHICLE] {plate} → wlasciciel: {data['wlasciciel']} | phone: {data.get('phone')} | vehicles: {data.get('vehicles')}")
 
         return data
 
