@@ -161,30 +161,34 @@ async def update_vehicle_plate(request: Request, db: Session = Depends(get_db)):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
     
-# ====================== USUWANIE POJAZDU Z PERSPEKTYWY OBYWATELA (SOFT-DELETE) ======================
-@router.delete("/vehicles/{plate}")
-async def delete_vehicle_for_owner(plate: str, request: Request, db: Session = Depends(get_db)):
+# ====================== CITIZENS (z soft-delete) ======================
+@router.get("/citizens")
+async def get_all_citizens_endpoint(request: Request, db: Session = Depends(get_db)):
     try:
-        plate = plate.upper().strip()
-
-        result = db.execute(text("""
-            UPDATE vehicles 
-            SET is_deleted = true,
-                deleted_by = 'citizen',
-                deleted_at = CURRENT_TIMESTAMP
-            WHERE numer_rejestracyjny = :plate
-              AND is_deleted = false
-        """), {"plate": plate})
-
-        db.commit()
-
-        if result.rowcount == 0:
-            return {"status": "warning", "message": "Pojazd nie znaleziony lub już usunięty"}
-
-        print(f"[DEBUG SOFT-DELETE] Pojazd {plate} oznaczony jako usunięty przez obywatela")
-        return {"status": "success", "message": f"Pojazd {plate} usunięty z Twojego rejestru"}
-
+        query = text("""
+            SELECT
+                o.id,
+                o.imie,
+                o.nazwisko,
+                COALESCE(o.nr_telefonu_enc, '') as phone,
+                COALESCE(o.facebook, '') as facebook,
+                COALESCE(o.instagram, '') as instagram,
+                COALESCE(o.x_handle, '') as x_handle,
+                COALESCE(o.linkedin, '') as linkedin,
+                COALESCE(
+                    (SELECT json_agg(v.numer_rejestracyjny)
+                     FROM vehicles v 
+                     WHERE v.owner_id = o.id 
+                       AND v.is_deleted = false),
+                    '[]'
+                ) as vehicles
+            FROM owners o
+            ORDER BY o.nazwisko, o.imie
+        """)
+        result = db.execute(query)
+        citizens = [dict(row._mapping) for row in result]
+        return citizens
     except Exception as e:
-        db.rollback()
+        print("[ERROR CITIZENS]", str(e))
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
