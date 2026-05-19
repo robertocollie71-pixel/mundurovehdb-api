@@ -23,7 +23,8 @@ async def get_vehicle(numer_rejestracyjny: str, request: Request, db: Session = 
                 COALESCE(o.facebook, '') as facebook,
                 COALESCE(o.instagram, '') as instagram,
                 COALESCE(o.x_handle, '') as x_handle,
-                COALESCE(o.linkedin, '') as linkedin
+                COALESCE(o.linkedin, '') as linkedin,
+                o.id as owner_id
             FROM vehicles v
             LEFT JOIN owners o ON v.owner_id = o.id
             WHERE v.numer_rejestracyjny = :plate
@@ -39,7 +40,7 @@ async def get_vehicle(numer_rejestracyjny: str, request: Request, db: Session = 
 
         data["wlasciciel"] = f"{data.get('imie') or ''} {data.get('nazwisko') or ''}".strip() or "Nieznany właściciel"
 
-        print(f"[DEBUG VEHICLE SUCCESS] {plate} → właściciel: {data['wlasciciel']} | tel: {data.get('phone')} | social: {data.get('x_handle')}")
+        print(f"[DEBUG VEHICLE] {plate} | owner_id={data.get('owner_id')} | wlasciciel={data['wlasciciel']} | tel={data.get('phone')} | x={data.get('x_handle')}")
 
         return data
 
