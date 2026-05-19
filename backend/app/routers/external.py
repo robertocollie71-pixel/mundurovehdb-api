@@ -126,6 +126,14 @@ async def add_vehicle(request: Request, db: Session = Depends(get_db)):
 @router.get("/citizens")
 async def get_all_citizens_endpoint(request: Request, db: Session = Depends(get_db)):
     try:
+        # Bezpieczne dodanie kolumn social media przed odczytem
+        for col in ["facebook", "instagram", "x_handle", "linkedin"]:
+            try:
+                db.execute(text(f"ALTER TABLE owners ADD COLUMN {col} TEXT"))
+                db.commit()
+            except:
+                pass
+
         query = text("""
             SELECT
                 o.id,
