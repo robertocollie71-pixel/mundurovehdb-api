@@ -167,20 +167,22 @@ async def delete_vehicle_for_owner(plate: str, request: Request, db: Session = D
     try:
         plate = plate.upper().strip()
 
-        # SOFT-DELETE: odłączamy pojazd od właściciela (owner_id = NULL)
-        # Pojazd zostaje w bazie, ale znika z Panelu Obywatelskiego
+        # Poprawny soft-delete z flagą
         result = db.execute(text("""
             UPDATE vehicles 
-            SET owner_id = NULL
+            SET is_deleted = true,
+                deleted_by = 'citizen',
+                deleted_at = CURRENT_TIMESTAMP
             WHERE numer_rejestracyjny = :plate
+              AND is_deleted = false
         """), {"plate": plate})
 
         db.commit()
 
         if result.rowcount == 0:
-            return {"status": "warning", "message": "Pojazd nie znaleziony"}
+            return {"status": "warning", "message": "Pojazd nie znaleziony lub już usunięty"}
 
-        print(f"[DEBUG SOFT-DELETE] Pojazd {plate} odłączony od właściciela (został w bazie)")
+        print(f"[DEBUG SOFT-DELETE] Pojazd {plate} oznaczony jako usunięty przez obywatela")
         return {"status": "success", "message": f"Pojazd {plate} usunięty z Twojego rejestru"}
 
     except Exception as e:
