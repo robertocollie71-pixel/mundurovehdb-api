@@ -2,6 +2,7 @@ from fastapi import APIRouter, Request, HTTPException, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 from backend.app.db.session import get_db
+import traceback
 
 router = APIRouter(prefix="/external", tags=["external"])
 
@@ -15,21 +16,30 @@ async def update_or_create_phone(request: Request, db: Session = Depends(get_db)
         imie = data.get("imie")
         nazwisko = data.get("nazwisko")
 
-        print(f"[DEBUG PHONE] Zapisuję: {phone} | {imie} {nazwisko}")
+        print(f"[DEBUG PHONE] Otrzymano dane: phone={phone}, imie={imie}, nazwisko={nazwisko}")
 
+        # Prosty i bezpieczny upsert dla SQLite
         query = text("""
-            INSERT INTO owners (nr_telefonu_enc, imie, nazwisko)
+            INSERT OR IGNORE INTO owners (nr_telefonu_enc, imie, nazwisko)
             VALUES (:phone, :imie, :nazwisko)
-            ON CONFLICT (nr_telefonu_enc) 
-            DO UPDATE SET imie = excluded.imie, nazwisko = excluded.nazwisko
         """)
         db.execute(query, {"phone": phone, "imie": imie, "nazwisko": nazwisko})
-        db.commit()
 
-        return {"status": "success", "message": "Dane obywatela zapisane"}
+        query = text("""
+            UPDATE owners 
+            SET imie = :imie, nazwisko = :nazwisko
+            WHERE nr_telefonu_enc = :phone
+        """)
+        db.execute(query, {"phone": phone, "imie": imie, "nazwisko": nazwisko})
+
+        db.commit()
+        print("[DEBUG PHONE] ✅ Zapisano pomyślnie")
+        return {"status": "success", "message": "Dane zapisane"}
+
     except Exception as e:
         db.rollback()
-        print("[ERROR PHONE]", str(e))
+        print("[ERROR PHONE] Błąd:", str(e))
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 # ====================== SOCIAL MEDIA ======================
@@ -43,7 +53,7 @@ async def save_social_media(request: Request, db: Session = Depends(get_db)):
         x = data.get("x")
         linkedin = data.get("linkedin")
 
-        print(f"[DEBUG SOCIAL] Zapisuję dla {phone} → FB:{facebook}, IG:{instagram}, X:{x}, LI:{linkedin}")
+        print(f"[DEBUG SOCIAL] Otrzymano: phone={phone}, FB={facebook}, IG={instagram}, X={x}, LI={linkedin}")
 
         query = text("""
             UPDATE owners 
@@ -54,19 +64,22 @@ async def save_social_media(request: Request, db: Session = Depends(get_db)):
             WHERE nr_telefonu_enc = :phone
         """)
         
-        db.execute(query, {
+        result = db.execute(query, {
             "phone": phone,
-            "facebook": facebook or None,
-            "instagram": instagram or None,
-            "x": x or None,
-            "linkedin": linkedin or None
+            "facebook": facebook,
+            "instagram": instagram,
+            "x": x,
+            "linkedin": linkedin
         })
         db.commit()
 
-        return {"status": "success", "message": "Social media zapisane pomyślnie"}
+        print(f"[DEBUG SOCIAL] ✅ Zaktualizowano {result.rowcount} wierszy")
+        return {"status": "success", "message": "Social media zapisane"}
+
     except Exception as e:
         db.rollback()
-        print("[ERROR SOCIAL]", str(e))
+        print("[ERROR SOCIAL] Błąd:", str(e))
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 # ====================== CITIZENS ======================
@@ -92,4 +105,5 @@ async def get_all_citizens_endpoint(request: Request, db: Session = Depends(get_
         return citizens
     except Exception as e:
         print("[ERROR CITIZENS]", str(e))
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
