@@ -36,7 +36,7 @@ async def update_or_create_phone(request: Request, db: Session = Depends(get_db)
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-# ====================== SOCIAL MEDIA (z bezpiecznym dodaniem kolumn) ======================
+# ====================== SOCIAL MEDIA ======================
 @router.post("/social")
 async def save_social_media(request: Request, db: Session = Depends(get_db)):
     try:
@@ -49,14 +49,13 @@ async def save_social_media(request: Request, db: Session = Depends(get_db)):
 
         print(f"[DEBUG SOCIAL] Zapisuję dla {phone} → FB:{facebook}, IG:{instagram}, X:{x}, LI:{linkedin}")
 
-        # Bezpieczne dodanie kolumn jeśli nie istnieją
         for col in ["facebook", "instagram", "x_handle", "linkedin"]:
             try:
                 db.execute(text(f"ALTER TABLE owners ADD COLUMN {col} TEXT"))
                 db.commit()
                 print(f"[DEBUG SOCIAL] Dodano kolumnę: {col}")
             except:
-                pass  # kolumna już istnieje
+                pass
 
         query = text("""
             UPDATE owners 
@@ -99,7 +98,6 @@ async def add_vehicle(request: Request, db: Session = Depends(get_db)):
         plate = plate.upper().strip()
         print(f"[DEBUG VEHICLE] Dodaję pojazd {plate} dla telefonu {phone}")
 
-        # Znajdź lub utwórz właściciela
         db.execute(text("""
             INSERT INTO owners (nr_telefonu_enc, imie, nazwisko, pesel_hash)
             VALUES (:phone, 'Nowy', 'Użytkownik', '')
@@ -124,7 +122,7 @@ async def add_vehicle(request: Request, db: Session = Depends(get_db)):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-# ====================== CITIZENS ======================
+# ====================== CITIZENS (z social media) ======================
 @router.get("/citizens")
 async def get_all_citizens_endpoint(request: Request, db: Session = Depends(get_db)):
     try:
@@ -134,6 +132,10 @@ async def get_all_citizens_endpoint(request: Request, db: Session = Depends(get_
                 o.imie,
                 o.nazwisko,
                 COALESCE(o.nr_telefonu_enc, '') as phone,
+                COALESCE(o.facebook, '') as facebook,
+                COALESCE(o.instagram, '') as instagram,
+                COALESCE(o.x_handle, '') as x_handle,
+                COALESCE(o.linkedin, '') as linkedin,
                 COALESCE(
                     (SELECT json_group_array(v.numer_rejestracyjny)
                      FROM vehicles v WHERE v.owner_id = o.id),
