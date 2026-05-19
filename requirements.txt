@@ -3,6 +3,7 @@ uvicorn[standard]
 sqlalchemy
 pydantic
 pydantic-settings
-pysqlite3-binary
+psycopg2-binary
 python-dotenv
 starlette
+alembic

@@ -1,24 +1,16 @@
-# === MONKEY-PATCH pysqlite3 ===
-import sys
-import pysqlite3
-sys.modules['sqlite3'] = pysqlite3
-
 from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker
-from backend.app.core.config import get_settings
+from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.ext.declarative import declarative_base
+import os
 
-settings = get_settings()
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Warunkowe connect_args – tylko dla SQLite
-connect_args = {"check_same_thread": False} if "sqlite" in settings.DATABASE_URL.lower() else {}
+if not DATABASE_URL:
+    raise ValueError("DATABASE_URL nie jest ustawiony w zmiennych środowiskowych")
 
-engine = create_engine(
-    settings.DATABASE_URL,
-    connect_args=connect_args,
-    echo=settings.DEBUG
-)
-
+engine = create_engine(DATABASE_URL, echo=False)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
 
 def get_db():
     db = SessionLocal()
