@@ -18,9 +18,10 @@ async def update_or_create_phone(request: Request, db: Session = Depends(get_db)
 
         print(f"[DEBUG PHONE] Otrzymano: phone={phone}, imie={imie}, nazwisko={nazwisko}")
 
+        # Poprawione zapytanie – dodajemy pesel_hash jako pusty string
         query = text("""
-            INSERT INTO owners (nr_telefonu_enc, imie, nazwisko)
-            VALUES (:phone, :imie, :nazwisko)
+            INSERT INTO owners (nr_telefonu_enc, imie, nazwisko, pesel_hash)
+            VALUES (:phone, :imie, :nazwisko, '')
             ON CONFLICT (nr_telefonu_enc) 
             DO UPDATE SET imie = excluded.imie, nazwisko = excluded.nazwisko
         """)
@@ -28,7 +29,7 @@ async def update_or_create_phone(request: Request, db: Session = Depends(get_db)
         db.commit()
 
         print("[DEBUG PHONE] ✅ Obywatel zapisany pomyślnie")
-        return {"status": "success", "message": "Dane obywatela zapisane"}
+        return {"status": "success", "message": "Dane zapisane"}
 
     except Exception as e:
         db.rollback()
@@ -47,15 +48,7 @@ async def save_social_media(request: Request, db: Session = Depends(get_db)):
         x = data.get("x")
         linkedin = data.get("linkedin")
 
-        print(f"[DEBUG SOCIAL] Otrzymano dla {phone} → FB:{facebook}, IG:{instagram}, X:{x}, LI:{linkedin}")
-
-        # Bezpieczne dodanie kolumn jeśli nie istnieją
-        for col in ["facebook", "instagram", "x_handle", "linkedin"]:
-            try:
-                db.execute(text(f"ALTER TABLE owners ADD COLUMN {col} TEXT"))
-                db.commit()
-            except:
-                pass  # kolumna już istnieje
+        print(f"[DEBUG SOCIAL] Zapisuję dla {phone} → FB:{facebook}, IG:{instagram}, X:{x}, LI:{linkedin}")
 
         query = text("""
             UPDATE owners 
@@ -93,15 +86,15 @@ async def add_vehicle(request: Request, db: Session = Depends(get_db)):
         plate = data.get("numer_rejestracyjny")
 
         if not phone or not plate:
-            raise HTTPException(status_code=400, detail="Brak numeru telefonu lub rejestracyjnego")
+            raise HTTPException(status_code=400, detail="Brak telefonu lub numeru rejestracyjnego")
 
         plate = plate.upper().strip()
         print(f"[DEBUG VEHICLE] Dodaję pojazd {plate} dla telefonu {phone}")
 
         # Znajdź lub utwórz właściciela
         owner_query = text("""
-            INSERT INTO owners (nr_telefonu_enc, imie, nazwisko)
-            VALUES (:phone, 'Nowy', 'Użytkownik')
+            INSERT INTO owners (nr_telefonu_enc, imie, nazwisko, pesel_hash)
+            VALUES (:phone, 'Nowy', 'Użytkownik', '')
             ON CONFLICT (nr_telefonu_enc) DO NOTHING
         """)
         db.execute(owner_query, {"phone": phone})
