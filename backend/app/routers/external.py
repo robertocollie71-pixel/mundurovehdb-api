@@ -122,15 +122,16 @@ async def add_vehicle(request: Request, db: Session = Depends(get_db)):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-# ====================== CITIZENS (z social media) ======================
+# ====================== CITIZENS (z social media + bezpieczne dodanie kolumn) ======================
 @router.get("/citizens")
 async def get_all_citizens_endpoint(request: Request, db: Session = Depends(get_db)):
     try:
-        # Bezpieczne dodanie kolumn social media przed odczytem
+        # Bezpieczne dodanie kolumn social media jeśli ich nie ma
         for col in ["facebook", "instagram", "x_handle", "linkedin"]:
             try:
                 db.execute(text(f"ALTER TABLE owners ADD COLUMN {col} TEXT"))
                 db.commit()
+                print(f"[DEBUG CITIZENS] Dodano kolumnę: {col}")
             except:
                 pass
 
