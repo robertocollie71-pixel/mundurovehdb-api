@@ -161,34 +161,28 @@ async def update_vehicle_plate(request: Request, db: Session = Depends(get_db)):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
     
-# ====================== CITIZENS (z soft-delete) ======================
-@router.get("/citizens")
-async def get_all_citizens_endpoint(request: Request, db: Session = Depends(get_db)):
+# ====================== USUWANIE POJAZDU Z PERSPEKTYWY OBYWATELA (SOFT-DELETE) ======================
+@router.delete("/vehicles/{plate}")
+async def delete_vehicle_for_owner(plate: str, request: Request, db: Session = Depends(get_db)):
     try:
-        query = text("""
-            SELECT
-                o.id,
-                o.imie,
-                o.nazwisko,
-                COALESCE(o.nr_telefonu_enc, '') as phone,
-                COALESCE(o.facebook, '') as facebook,
-                COALESCE(o.instagram, '') as instagram,
-                COALESCE(o.x_handle, '') as x_handle,
-                COALESCE(o.linkedin, '') as linkedin,
-                COALESCE(
-                    (SELECT json_agg(v.numer_rejestracyjny)
-                     FROM vehicles v 
-                     WHERE v.owner_id = o.id 
-                       AND v.is_deleted = false),
-                    '[]'
-                ) as vehicles
-            FROM owners o
-            ORDER BY o.nazwisko, o.imie
-        """)
-        result = db.execute(query)
-        citizens = [dict(row._mapping) for row in result]
-        return citizens
+        plate = plate.upper().strip()
+
+        # SOFT-DELETE: odłączamy pojazd od właściciela
+        result = db.execute(text("""
+            UPDATE vehicles 
+            SET owner_id = NULL
+            WHERE numer_rejestracyjny = :plate
+        """), {"plate": plate})
+
+        db.commit()
+
+        if result.rowcount == 0:
+            return {"status": "warning", "message": "Pojazd nie znaleziony"}
+
+        print(f"[DEBUG SOFT-DELETE] Pojazd {plate} odłączony od właściciela (został w bazie)")
+        return {"status": "success", "message": f"Pojazd {plate} usunięty z Twojego rejestru"}
+
     except Exception as e:
-        print("[ERROR CITIZENS]", str(e))
+        db.rollback()
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
