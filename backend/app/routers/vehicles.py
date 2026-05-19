@@ -20,6 +20,10 @@ async def get_vehicle(numer_rejestracyjny: str, request: Request, db: Session = 
                 o.imie,
                 o.nazwisko,
                 COALESCE(o.nr_telefonu_enc, '') as phone,
+                COALESCE(o.facebook, '') as facebook,
+                COALESCE(o.instagram, '') as instagram,
+                COALESCE(o.x_handle, '') as x_handle,
+                COALESCE(o.linkedin, '') as linkedin,
                 o.id as owner_id
             FROM vehicles v
             LEFT JOIN owners o ON v.owner_id = o.id
@@ -34,10 +38,10 @@ async def get_vehicle(numer_rejestracyjny: str, request: Request, db: Session = 
 
         data = dict(result._mapping)
 
-        # Zawsze zwracamy czytelne pola dla panelu policji
         data["wlasciciel"] = f"{data.get('imie') or ''} {data.get('nazwisko') or ''}".strip() or "Nieznany właściciel"
 
-        print(f"[DEBUG VEHICLE] {plate} → owner_id={data.get('owner_id')} | wlasciciel={data['wlasciciel']} | phone={data.get('phone')}")
+        # Debug w terminalu (Railway logs)
+        print(f"[DEBUG VEHICLE] {plate} | owner_id={data.get('owner_id')} | wlasciciel={data['wlasciciel']} | phone={data.get('phone')} | x={data.get('x_handle')}")
 
         return data
 
