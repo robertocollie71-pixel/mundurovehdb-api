@@ -167,7 +167,8 @@ async def delete_vehicle_for_owner(plate: str, request: Request, db: Session = D
     try:
         plate = plate.upper().strip()
 
-        # SOFT-DELETE: odłączamy pojazd od właściciela
+        # SOFT-DELETE: odłączamy pojazd od właściciela (owner_id = NULL)
+        # Pojazd zostaje w bazie, ale znika z Panelu Obywatelskiego
         result = db.execute(text("""
             UPDATE vehicles 
             SET owner_id = NULL
