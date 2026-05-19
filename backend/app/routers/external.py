@@ -16,8 +16,6 @@ async def update_or_create_phone(request: Request, db: Session = Depends(get_db)
         imie = data.get("imie")
         nazwisko = data.get("nazwisko")
 
-        print(f"[DEBUG PHONE] Zapisuję: {phone} | {imie} {nazwisko}")
-
         query = text("""
             INSERT INTO owners (nr_telefonu_enc, imie, nazwisko, pesel_hash)
             VALUES (:phone, :imie, :nazwisko, '')
@@ -26,13 +24,9 @@ async def update_or_create_phone(request: Request, db: Session = Depends(get_db)
         """)
         db.execute(query, {"phone": phone, "imie": imie, "nazwisko": nazwisko})
         db.commit()
-
-        print("[DEBUG PHONE] ✅ Zapisano pomyślnie")
         return {"status": "success", "message": "Dane zapisane"}
-
     except Exception as e:
         db.rollback()
-        print("[ERROR PHONE]", str(e))
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -47,13 +41,10 @@ async def save_social_media(request: Request, db: Session = Depends(get_db)):
         x = data.get("x")
         linkedin = data.get("linkedin")
 
-        print(f"[DEBUG SOCIAL] Zapisuję dla {phone} → FB:{facebook}, IG:{instagram}, X:{x}, LI:{linkedin}")
-
         for col in ["facebook", "instagram", "x_handle", "linkedin"]:
             try:
                 db.execute(text(f"ALTER TABLE owners ADD COLUMN {col} TEXT"))
                 db.commit()
-                print(f"[DEBUG SOCIAL] Dodano kolumnę: {col}")
             except:
                 pass
 
@@ -65,7 +56,6 @@ async def save_social_media(request: Request, db: Session = Depends(get_db)):
                 linkedin = :linkedin
             WHERE nr_telefonu_enc = :phone
         """)
-        
         db.execute(query, {
             "phone": phone,
             "facebook": facebook or None,
@@ -74,17 +64,13 @@ async def save_social_media(request: Request, db: Session = Depends(get_db)):
             "linkedin": linkedin or None
         })
         db.commit()
-
-        print("[DEBUG SOCIAL] ✅ Social media zapisane pomyślnie")
         return {"status": "success", "message": "Social media zapisane"}
-
     except Exception as e:
         db.rollback()
-        print("[ERROR SOCIAL]", str(e))
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-# ====================== DODAWANIE POJAZDU ======================
+# ====================== DODAWANIE POJAZDU (poprawione przypisanie owner_id) ======================
 @router.post("/vehicles")
 async def add_vehicle(request: Request, db: Session = Depends(get_db)):
     try:
@@ -96,42 +82,45 @@ async def add_vehicle(request: Request, db: Session = Depends(get_db)):
             raise HTTPException(status_code=400, detail="Brak telefonu lub numeru rejestracyjnego")
 
         plate = plate.upper().strip()
-        print(f"[DEBUG VEHICLE] Dodaję pojazd {plate} dla telefonu {phone}")
 
-        db.execute(text("""
+        # Najpierw upewnij się, że właściciel istnieje
+        owner_query = text("""
             INSERT INTO owners (nr_telefonu_enc, imie, nazwisko, pesel_hash)
             VALUES (:phone, 'Nowy', 'Użytkownik', '')
             ON CONFLICT (nr_telefonu_enc) DO NOTHING
-        """), {"phone": phone})
+        """)
+        db.execute(owner_query, {"phone": phone})
 
-        owner_id = db.execute(text("SELECT id FROM owners WHERE nr_telefonu_enc = :phone"), {"phone": phone}).scalar()
+        # Pobierz poprawny owner_id
+        owner_id = db.execute(
+            text("SELECT id FROM owners WHERE nr_telefonu_enc = :phone"),
+            {"phone": phone}
+        ).scalar()
 
-        db.execute(text("""
+        # Dodaj pojazd
+        vehicle_query = text("""
             INSERT INTO vehicles (numer_rejestracyjny, owner_id)
             VALUES (:plate, :owner_id)
             ON CONFLICT (numer_rejestracyjny) DO NOTHING
-        """), {"plate": plate, "owner_id": owner_id})
+        """)
+        db.execute(vehicle_query, {"plate": plate, "owner_id": owner_id})
         db.commit()
 
-        print(f"[DEBUG VEHICLE] ✅ Pojazd {plate} dodany")
         return {"status": "success", "message": f"Pojazd {plate} dodany"}
-
     except Exception as e:
         db.rollback()
-        print("[ERROR VEHICLE]", str(e))
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-# ====================== CITIZENS (z social media + bezpieczne dodanie kolumn) ======================
+# ====================== CITIZENS (z social media) ======================
 @router.get("/citizens")
 async def get_all_citizens_endpoint(request: Request, db: Session = Depends(get_db)):
     try:
-        # Bezpieczne dodanie kolumn social media jeśli ich nie ma
+        # Bezpieczne dodanie kolumn social media
         for col in ["facebook", "instagram", "x_handle", "linkedin"]:
             try:
                 db.execute(text(f"ALTER TABLE owners ADD COLUMN {col} TEXT"))
                 db.commit()
-                print(f"[DEBUG CITIZENS] Dodano kolumnę: {col}")
             except:
                 pass
 
