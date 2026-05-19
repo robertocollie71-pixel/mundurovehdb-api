@@ -16,9 +16,7 @@ async def get_vehicle(numer_rejestracyjny: str, request: Request, db: Session = 
         query = text("""
             SELECT 
                 v.numer_rejestracyjny,
-                COALESCE(v.vin, '') as vin,
                 COALESCE(v.marka_model, '[dane z CEPiK]') as marka_model,
-                COALESCE(v.rok_produkcji, '') as rok_produkcji,
                 o.imie,
                 o.nazwisko,
                 COALESCE(o.nr_telefonu_enc, '') as phone
@@ -36,7 +34,7 @@ async def get_vehicle(numer_rejestracyjny: str, request: Request, db: Session = 
         data = dict(result._mapping)
         data["wlasciciel"] = f"{data.get('imie', '')} {data.get('nazwisko', '')}".strip() or "Nieznany właściciel"
 
-        print(f"[DEBUG VEHICLE] Znaleziono {plate} → właściciel: {data['wlasciciel']}, telefon: {data.get('phone')}")
+        print(f"[DEBUG VEHICLE] Znaleziono {plate} → {data['wlasciciel']} | tel: {data.get('phone')}")
 
         return data
 
