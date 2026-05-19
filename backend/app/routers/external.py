@@ -158,14 +158,17 @@ async def update_vehicle_plate(request: Request, db: Session = Depends(get_db)):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
     
-    # ====================== USUWANIE POJAZDU Z PERSPEKTYWY OBYWATELA ======================
+# ====================== USUWANIE POJAZDU Z PERSPEKTYWY OBYWATELA (SOFT-DELETE) ======================
 @router.delete("/vehicles/{plate}")
 async def delete_vehicle_for_owner(plate: str, request: Request, db: Session = Depends(get_db)):
     try:
         plate = plate.upper().strip()
 
+        # SOFT-DELETE: odłączamy pojazd od właściciela (owner_id = NULL)
+        # Pojazd zostaje w bazie, ale znika z Panelu Obywatelskiego
         result = db.execute(text("""
-            DELETE FROM vehicles 
+            UPDATE vehicles 
+            SET owner_id = NULL
             WHERE numer_rejestracyjny = :plate
         """), {"plate": plate})
 
@@ -174,7 +177,7 @@ async def delete_vehicle_for_owner(plate: str, request: Request, db: Session = D
         if result.rowcount == 0:
             return {"status": "warning", "message": "Pojazd nie znaleziony"}
 
-        print(f"[DEBUG DELETE] Pojazd {plate} usunięty z Panelu Obywatelskiego")
+        print(f"[DEBUG SOFT-DELETE] Pojazd {plate} odłączony od właściciela (został w bazie)")
         return {"status": "success", "message": f"Pojazd {plate} usunięty z Twojego rejestru"}
 
     except Exception as e:
