@@ -126,3 +126,34 @@ async def get_all_citizens_endpoint(request: Request, db: Session = Depends(get_
         print("[ERROR CITIZENS]", str(e))
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+# ====================== EDYCJA NUMERU REJESTRACYJNEGO ======================
+@router.put("/vehicles/update")
+async def update_vehicle_plate(request: Request, db: Session = Depends(get_db)):
+    try:
+        data = await request.json()
+        old_plate = data.get("old_plate")
+        new_plate = data.get("new_plate")
+
+        if not old_plate or not new_plate:
+            raise HTTPException(status_code=400, detail="Brak starych/nowych danych")
+
+        new_plate = new_plate.upper().strip()
+
+        query = text("""
+            UPDATE vehicles 
+            SET numer_rejestracyjny = :new_plate
+            WHERE numer_rejestracyjny = :old_plate
+        """)
+        result = db.execute(query, {"old_plate": old_plate, "new_plate": new_plate})
+        db.commit()
+
+        if result.rowcount == 0:
+            return {"status": "warning", "message": "Nie znaleziono pojazdu"}
+
+        print(f"[DEBUG VEHICLE UPDATE] {old_plate} → {new_plate}")
+        return {"status": "success", "message": f"Pojazd zmieniony na {new_plate}"}
+
+    except Exception as e:
+        db.rollback()
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
