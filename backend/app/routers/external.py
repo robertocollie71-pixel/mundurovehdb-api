@@ -97,7 +97,7 @@ async def add_vehicle(request: Request, db: Session = Depends(get_db)):
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-# ====================== CITIZENS (poprawione dla PostgreSQL) ======================
+# ====================== CITIZENS (z soft-delete) ======================
 @router.get("/citizens")
 async def get_all_citizens_endpoint(request: Request, db: Session = Depends(get_db)):
     try:
@@ -113,7 +113,9 @@ async def get_all_citizens_endpoint(request: Request, db: Session = Depends(get_
                 COALESCE(o.linkedin, '') as linkedin,
                 COALESCE(
                     (SELECT json_agg(v.numer_rejestracyjny)
-                     FROM vehicles v WHERE v.owner_id = o.id),
+                     FROM vehicles v 
+                     WHERE v.owner_id = o.id 
+                       AND v.is_deleted = false),
                     '[]'
                 ) as vehicles
             FROM owners o
@@ -126,6 +128,7 @@ async def get_all_citizens_endpoint(request: Request, db: Session = Depends(get_
         print("[ERROR CITIZENS]", str(e))
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
+    
 # ====================== EDYCJA NUMERU REJESTRACYJNEGO ======================
 @router.put("/vehicles/update")
 async def update_vehicle_plate(request: Request, db: Session = Depends(get_db)):
@@ -164,20 +167,21 @@ async def delete_vehicle_for_owner(plate: str, request: Request, db: Session = D
     try:
         plate = plate.upper().strip()
 
-        # SOFT-DELETE: odłączamy pojazd od właściciela (owner_id = NULL)
-        # Pojazd zostaje w bazie danych, ale znika z Panelu Obywatelskiego
         result = db.execute(text("""
             UPDATE vehicles 
-            SET owner_id = NULL
+            SET is_deleted = true,
+                deleted_by = 'citizen',
+                deleted_at = CURRENT_TIMESTAMP
             WHERE numer_rejestracyjny = :plate
+              AND is_deleted = false
         """), {"plate": plate})
 
         db.commit()
 
         if result.rowcount == 0:
-            return {"status": "warning", "message": "Pojazd nie znaleziony"}
+            return {"status": "warning", "message": "Pojazd nie znaleziony lub już usunięty"}
 
-        print(f"[DEBUG SOFT-DELETE] Pojazd {plate} odłączony od właściciela (został w bazie)")
+        print(f"[DEBUG SOFT-DELETE] Pojazd {plate} oznaczony jako usunięty przez obywatela")
         return {"status": "success", "message": f"Pojazd {plate} usunięty z Twojego rejestru"}
 
     except Exception as e:
