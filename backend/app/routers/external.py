@@ -6,7 +6,7 @@ import traceback
 
 router = APIRouter(prefix="/external", tags=["external"])
 
-# ====================== PHONE ======================
+# ====================== PHONE (zawsze aktualizuj istniejący rekord) ======================
 @router.post("/phone")
 @router.patch("/phone")
 async def update_or_create_phone(request: Request, db: Session = Depends(get_db)):
@@ -16,18 +16,21 @@ async def update_or_create_phone(request: Request, db: Session = Depends(get_db)
         imie = data.get("imie")
         nazwisko = data.get("nazwisko")
 
-        print(f"[DEBUG PHONE] Zapisuję: {phone} | {imie} {nazwisko}")
+        print(f"[DEBUG PHONE] Aktualizacja: {phone} | {imie} {nazwisko}")
 
+        # Zawsze aktualizujemy po numerze telefonu (główna logika)
         query = text("""
             INSERT INTO owners (nr_telefonu_enc, imie, nazwisko, pesel_hash)
             VALUES (:phone, :imie, :nazwisko, '')
             ON CONFLICT (nr_telefonu_enc) 
-            DO UPDATE SET imie = excluded.imie, nazwisko = excluded.nazwisko
+            DO UPDATE SET 
+                imie = excluded.imie,
+                nazwisko = excluded.nazwisko
         """)
         db.execute(query, {"phone": phone, "imie": imie, "nazwisko": nazwisko})
         db.commit()
 
-        print("[DEBUG PHONE] ✅ Zapisano pomyślnie")
+        print("[DEBUG PHONE] ✅ Zapisano pomyślnie (update)")
         return {"status": "success", "message": "Dane zapisane"}
 
     except Exception as e:
@@ -36,7 +39,7 @@ async def update_or_create_phone(request: Request, db: Session = Depends(get_db)
         traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
-# ====================== SOCIAL MEDIA ======================
+# ====================== SOCIAL MEDIA (zawsze aktualizuj istniejący rekord) ======================
 @router.post("/social")
 async def save_social_media(request: Request, db: Session = Depends(get_db)):
     try:
@@ -47,8 +50,9 @@ async def save_social_media(request: Request, db: Session = Depends(get_db)):
         x = data.get("x")
         linkedin = data.get("linkedin")
 
-        print(f"[DEBUG SOCIAL] Zapisuję dla {phone} → FB:{facebook}, IG:{instagram}, X:{x}, LI:{linkedin}")
+        print(f"[DEBUG SOCIAL] Aktualizacja social dla {phone}")
 
+        # Bezpieczne dodanie kolumn jeśli nie istnieją
         for col in ["facebook", "instagram", "x_handle", "linkedin"]:
             try:
                 db.execute(text(f"ALTER TABLE owners ADD COLUMN {col} TEXT"))
@@ -65,7 +69,7 @@ async def save_social_media(request: Request, db: Session = Depends(get_db)):
             WHERE nr_telefonu_enc = :phone
         """)
         
-        db.execute(query, {
+        result = db.execute(query, {
             "phone": phone,
             "facebook": facebook or None,
             "instagram": instagram or None,
@@ -74,7 +78,7 @@ async def save_social_media(request: Request, db: Session = Depends(get_db)):
         })
         db.commit()
 
-        print("[DEBUG SOCIAL] ✅ Social media zapisane pomyślnie")
+        print(f"[DEBUG SOCIAL] ✅ Zaktualizowano {result.rowcount} rekordów")
         return {"status": "success", "message": "Social media zapisane"}
 
     except Exception as e:
