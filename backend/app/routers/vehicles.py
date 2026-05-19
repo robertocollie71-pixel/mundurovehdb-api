@@ -7,31 +7,41 @@ router = APIRouter(prefix="/vehicles", tags=["vehicles"])
 
 @router.get("/{numer_rejestracyjny}")
 async def get_vehicle(numer_rejestracyjny: str, request: Request, db: Session = Depends(get_db)):
-    # Ignorujemy favicon.ico – nie ma sensu szukać w bazie
     if numer_rejestracyjny.upper() == "FAVICON.ICO":
         return {"status": "ignored"}
+
+    plate = numer_rejestracyjny.upper().strip()
 
     try:
         query = text("""
             SELECT 
                 v.numer_rejestracyjny,
-                v.vin,
-                v.marka_model,
-                v.rok_produkcji,
-                v.data_waznosci_badania_technicznej,
+                COALESCE(v.vin, '') as vin,
+                COALESCE(v.marka_model, '[dane z CEPiK]') as marka_model,
+                COALESCE(v.rok_produkcji, '') as rok_produkcji,
                 o.imie,
                 o.nazwisko,
-                o.nr_telefonu_enc
+                COALESCE(o.nr_telefonu_enc, '') as phone
             FROM vehicles v
             LEFT JOIN owners o ON v.owner_id = o.id
-            WHERE v.numer_rejestracyjny = :rej
-              AND (o.access_level IS NULL OR o.access_level <= :access_level)
+            WHERE v.numer_rejestracyjny = :plate
             LIMIT 1
         """)
-        result = db.execute(query, {"rej": numer_rejestracyjny.upper(), "access_level": 3}).fetchone()
+
+        result = db.execute(query, {"plate": plate}).fetchone()
+
         if not result:
             raise HTTPException(status_code=404, detail="Pojazd nie znaleziony")
-        return dict(result._mapping)
+
+        data = dict(result._mapping)
+        data["wlasciciel"] = f"{data.get('imie', '')} {data.get('nazwisko', '')}".strip() or "Nieznany właściciel"
+
+        print(f"[DEBUG VEHICLE] Znaleziono {plate} → właściciel: {data['wlasciciel']}, telefon: {data.get('phone')}")
+
+        return data
+
     except Exception as e:
-        print("[ERROR vehicles]", str(e))
+        print(f"[ERROR vehicles] {plate} → {str(e)}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
